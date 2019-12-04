@@ -1,0 +1,139 @@
+---
+title: "Time series analysis of the GDP per capita of UK"
+author: "Ding Xu"
+date: "2019/4/20"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1.About the data
+I choose the time series data is GDP per capita of UK from 1830 to 2000. I got the data from "https://datamarket.com/data/set/1cf1/gdp-per-capita-old-version#!ds=1cf1!r2r=5t&display=line". I want to find the increasing trend of the GDP per capita.
+
+# 2.Plot the data
+```{r}
+setwd("/Users/cooper/Documents/Study/STT844/FINAL/")
+library(itsmr)
+data=read.csv("UKGDP.csv")
+test=data[1:178,2]
+data=data[1:171,]
+colnames(data)=c("Year","GDP")
+plot(data)
+data=data[,2]
+par(mfrow=c(1,2))
+acf(data,40,ylim=c(-1,1))
+pacf(data,40,ylim=c(-1,1))
+```
+
+From the data plot, i think it is exponential data, so a log transformation is necessary.
+
+From the ACF plot, i think a differencing transformation is needed.
+
+Then i do the transformation one by one.
+
+# 3.Transformation
+
+First, i do the log transformation.
+
+```{r}
+data_log=log(data)
+plot(data_log,type = "l")
+```
+
+It is obviously that the data doesn't have exponential feature anymore. But the trend still exists, i do the differencing transformation next.
+
+```{r}
+data_logdiff1=ts(diff(data_log,1))
+plot(data_logdiff1)
+```
+
+From the data plot above, the trend has eliminated. Then we can consider this transformed data as stationary data and use ARMA model to fit.
+
+# 4.Fit the data
+## 4.1 Decide the p&q
+```{r warning=FALSE}
+par(mfrow=c(1,2))
+acf(data_logdiff1,40,ylim=c(-1,1))
+pacf(data_logdiff1,40,ylim=c(-1,1))
+autofit(data_logdiff1,p=0:5,q=0:5)
+```
+- The ACF plot shows that $q=4$ as the $ACF=0$ after lags 4
+
+- The PACF plot shows that $p=5$ as the $PACF=0$ after lags 5
+
+- The minimum aicc model is $p=4\ ,q=1$ with $minAICC=-752.4$
+
+Combining the three results above, we can find the actually the ACF can be considered as 0 after lags 1 and PACF can be considered as 0 after lags 4. So i decide to use $p=4,\ q=1$
+
+## 4.2 Two ways to estimate the parameters
+
+### 4.2.1 Maximum likelihood 
+```{r}
+M=c("log","trend",1)
+e=Resid(data,M)
+fit.ml=arma(e,p=4,q=1)
+fit.ml
+```
+Using the maximum likelihood estimator, we can get that ${log(GDP)}_t$ fits the $ARIMA(4,1,1)$ with 
+
+$\mathbf{\hat\phi}_{ML}=(0.43616853, 0.71407804, -0.19942891, -0.0289658)^{\prime}\\\mathbf{\hat\theta}_{ML}=0.8879376\\ \hat\sigma^2_{ML}= 0.000690879$ 
+
+Then do the residual test to check if the residual is iid noise.
+
+```{r}
+ee.ml=Resid(data,M,fit.ml)
+test(ee.ml)
+```
+
+According to the test above, the residual of maximum likelihood estimate is iid noise.
+
+### 4.2.2 Preliminary estimation: Hannan-Rissanen algorithms
+```{r}
+fit.hannan=hannan(e,p=4,q=1)
+fit.hannan
+```
+Using the Hannan-Rissanen algorithms, we can get that ${log(GDP)}_t$ fits the $ARIMA(4,1,1)$ with
+
+$\mathbf{\hat\phi}_{HR}=(1.4993688,-0.5377175,-0.1461222 ,0.1738734)^{\prime}\\\mathbf{\hat\theta}_{HR}= -0.1838148\\ \hat\sigma^2_{HR}=0.0006907752$ 
+
+Then do the residual test to check if the residual is iid noise.
+
+```{r}
+ee.hannan=Resid(data,M,fit.hannan)
+test(ee.hannan)
+```
+
+According to the test above, the residual of hannan-rissanen algorithms is iid noise.
+
+# 5. Prediction
+
+Using the GDP per capita of UK from 2001 to 2007 to compare with the forecasting data from maximum likelihood estimate and hannan-rissanen algorithms
+
+
+## 5.1 Maximum likelihood 
+```{r}
+forecast(data,M,fit.ml,h=7,opt=1)
+ml=forecast(data,M,fit.ml,h=7,opt=0)
+mlforecast=c(data,ml$pred)
+plot(mlforecast,type = "l",col="red",ylim = c(0,25000))
+points(172:178,ml$l,col="red",type="l")
+points(172:178,ml$u,col="red",type="l")
+lines(test,col="blue")
+```
+
+## 5.2 Preliminary estimation: Hannan-Rissanen algorithms
+```{r}
+forecast(data,M,fit.hannan,h=7,opt=1)
+hannan=forecast(data,M,fit.hannan,h=7,opt=0)
+hannanforecast=c(data,hannan$pred)
+plot(hannanforecast,type = "l",col="red",ylim = c(0,25000))
+points(172:178,hannan$l,col="red",type="l")
+points(172:178,hannan$u,col="red",type="l")
+lines(test,col="blue")
+```
+
+# 6.Findings
+
+Comparing the forecasts of both methods, the Hannan-Rissanen estimation is much better than the maximum likelihood estimation. But neither of them is forecasting very well with the further estimation, and the confidence interval of both estimation prove that.
