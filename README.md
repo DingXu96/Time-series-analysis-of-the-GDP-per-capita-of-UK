@@ -2,4 +2,4 @@
 
 The R code of this project:
 
-The Final report of this project:
+The Final report of this project: [Final Report](./final.pdf)
